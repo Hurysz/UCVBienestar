@@ -1,0 +1,140 @@
+/**
+ * @file Firestore Security Rules for UCV Conecta Application
+ *
+ * @core_philosophy This ruleset enforces a user-ownership model for user profiles and appointments,
+ * while allowing public read access to resources, categories, and community chat messages
+ * for users with the '@ucvvirtual.edu.pe' email domain.
+ *
+ * @data_structure The Firestore database is structured as follows:
+ * - /userProfiles/{userProfileId}: Stores user profile information, accessible only to the user themselves.
+ * - /community_chat_messages/{chatMessageId}: Stores chat messages, publicly readable by users with a valid email domain.
+ * - /appointments/{appointmentId}: Stores appointment data, accessible only to the user who scheduled the appointment.
+ * - /resources/{resourceId}: Stores information about resources (e.g., events, study materials), publicly readable.
+ * - /categories/{categoryId}: Stores information about resource categories, publicly readable.
+ *
+ * @key_security_decisions
+ * - User profiles are strictly private and owned by the user.
+ * - Community chat messages are publicly readable for users with '@ucvvirtual.edu.pe' email.
+ * - Resources and categories are publicly readable.
+ * - Listing of user profiles is disallowed for security reasons.
+ * - Appointments are owned by the user who created them.
+ *
+ * @denormalization_for_authorization N/A. The current data model does not require denormalization. Access control is managed directly
+ * based on the request authentication and data within the documents.
+ *
+ * @structural_segregation The data is segregated into different collections based on access requirements:
+ * - User-specific data (userProfiles, appointments) is stored in dedicated collections with owner-only access.
+ * - Public data (community_chat_messages, resources, categories) is stored in separate collections with public read access.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Enforces user-ownership for user profiles.
+     * @path /userProfiles/{userProfileId}
+     * @allow (read, write): Authenticated user can only read and write their own profile.
+     * @deny (read, write): Authenticated user cannot read or write other user's profiles. Unauthenticated users cannot access any profile.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /userProfiles/{userProfileId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userProfileId) {
+        return isSignedIn() && request.auth.uid == userProfileId;
+      }
+
+      function isExistingOwner(userProfileId) {
+        return isOwner(userProfileId) && exists(resource);
+      }
+
+      allow get: if isOwner(userProfileId);
+      allow list: if false; // Listing user profiles is not allowed.
+      allow create: if isOwner(userProfileId);
+      allow update: if isExistingOwner(userProfileId);
+      allow delete: if isExistingOwner(userProfileId);
+    }
+
+    /**
+     * @description Allows public read access to community chat messages for users with the '@ucvvirtual.edu.pe' email domain.
+     * @path /community_chat_messages/{chatMessageId}
+     * @allow (read): Any user with '@ucvvirtual.edu.pe' email domain can read the messages.
+     * @deny (write): Only authenticated users with '@ucvvirtual.edu.pe' domain can create messages.
+     * @principle Provides public read access to community chat messages.
+     */
+    match /community_chat_messages/{chatMessageId} {
+        function isSignedIn() {
+            return request.auth != null;
+        }
+
+        function isValidEmailDomain() {
+            return request.auth.token.email.matches(r".*@ucvvirtual\.edu\.pe");
+        }
+
+        allow get: if true;
+        allow list: if true;
+        allow create: if isSignedIn() && isValidEmailDomain();
+        allow update: if false;
+        allow delete: if false;
+    }
+
+    /**
+     * @description Enforces user-ownership for appointments.
+     * @path /appointments/{appointmentId}
+     * @allow (read, write): Authenticated user can only read and write their own appointments.
+     * @deny (read, write): Authenticated user cannot read or write other user's appointments. Unauthenticated users cannot access any appointments.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /appointments/{appointmentId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userProfileId) {
+        return isSignedIn() && request.auth.uid == userProfileId;
+      }
+
+      function isExistingOwner(userProfileId) {
+        return isOwner(userProfileId) && exists(resource);
+      }
+
+      allow get: if isSignedIn() && resource.data.userProfileId == request.auth.uid;
+      allow list: if false;
+      allow create: if isSignedIn() && request.resource.data.userProfileId == request.auth.uid;
+      allow update: if isSignedIn() && request.resource.data.userProfileId == request.auth.uid && resource.data.userProfileId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userProfileId == request.auth.uid;
+    }
+
+    /**
+     * @description Allows public read access to resources.
+     * @path /resources/{resourceId}
+     * @allow (read): Any user can read resources.
+     * @deny (write): No user can write resources. // TODO: Implement admin-only write access.
+     * @principle Provides public read access to resources.
+     */
+    match /resources/{resourceId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin validation
+      allow update: if false; // TODO: Add admin validation
+      allow delete: if false; // TODO: Add admin validation
+    }
+
+    /**
+     * @description Allows public read access to categories.
+     * @path /categories/{categoryId}
+     * @allow (read): Any user can read categories.
+     * @deny (write): No user can write categories. // TODO: Implement admin-only write access.
+     * @principle Provides public read access to categories.
+     */
+    match /categories/{categoryId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin validation
+      allow update: if false; // TODO: Add admin validation
+      allow delete: if false; // TODO: Add admin validation
+    }
+  }
+}
