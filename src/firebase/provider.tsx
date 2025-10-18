@@ -1,6 +1,6 @@
 'use client';
 
-import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
+import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect, useCallback } from 'react';
 import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
@@ -30,6 +30,7 @@ export interface FirebaseContextState {
   user: User | null;
   isUserLoading: boolean; // True during initial auth check
   userError: Error | null; // Error from auth listener
+  refreshUser: () => Promise<void>;
 }
 
 // Return type for useFirebase()
@@ -40,6 +41,7 @@ export interface FirebaseServicesAndUser {
   user: User | null;
   isUserLoading: boolean;
   userError: Error | null;
+  refreshUser: () => Promise<void>;
 }
 
 // Return type for useUser() - specific to user auth state
@@ -47,6 +49,7 @@ export interface UserHookResult { // Renamed from UserAuthHookResult for consist
   user: User | null;
   isUserLoading: boolean;
   userError: Error | null;
+  refreshUser: () => Promise<void>;
 }
 
 // React Context
@@ -66,6 +69,18 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     isUserLoading: true, // Start loading until first auth event
     userError: null,
   });
+
+  // Callback to force-reload the user
+  const refreshUser = useCallback(async () => {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      await currentUser.reload();
+      // After reloading, we need to get the fresh user object.
+      // onAuthStateChanged will fire with the updated user, so we just need to trigger it.
+      // A simple way is to re-set the state with the reloaded user.
+      setUserAuthState(prevState => ({ ...prevState, user: auth.currentUser }));
+    }
+  }, [auth]);
 
   // Effect to subscribe to Firebase auth state changes
   useEffect(() => {
@@ -100,8 +115,9 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       user: userAuthState.user,
       isUserLoading: userAuthState.isUserLoading,
       userError: userAuthState.userError,
+      refreshUser,
     };
-  }, [firebaseApp, firestore, auth, userAuthState]);
+  }, [firebaseApp, firestore, auth, userAuthState, refreshUser]);
 
   return (
     <FirebaseContext.Provider value={contextValue}>
@@ -133,19 +149,28 @@ export const useFirebase = (): FirebaseServicesAndUser => {
     user: context.user,
     isUserLoading: context.isUserLoading,
     userError: context.userError,
+    refreshUser: context.refreshUser,
   };
 };
 
 /** Hook to access Firebase Auth instance. */
-export const useAuth = (): Auth => {
-  const { auth } = useFirebase();
-  return auth;
+export const useAuth = (): Auth | null => {
+  const context = useContext(FirebaseContext);
+  if (context === undefined) {
+    // This can happen on initial render before context is available.
+    // Returning null is safer than throwing an error for components that might render outside the provider initially.
+    return null;
+  }
+  return context.auth;
 };
 
 /** Hook to access Firestore instance. */
-export const useFirestore = (): Firestore => {
-  const { firestore } = useFirebase();
-  return firestore;
+export const useFirestore = (): Firestore | null => {
+   const context = useContext(FirebaseContext);
+   if (context === undefined) {
+     return null;
+   }
+   return context.firestore;
 };
 
 /** Hook to access Firebase App instance. */
@@ -170,7 +195,7 @@ export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | 
  * This provides the User object, loading status, and any auth errors.
  * @returns {UserHookResult} Object with user, isUserLoading, userError.
  */
-export const useUser = (): UserHookResult => { // Renamed from useAuthUser
-  const { user, isUserLoading, userError } = useFirebase(); // Leverages the main hook
-  return { user, isUserLoading, userError };
+export const useUser = (): UserHookResult => { 
+  const { user, isUserLoading, userError, refreshUser } = useFirebase(); 
+  return { user, isUserLoading, userError, refreshUser };
 };

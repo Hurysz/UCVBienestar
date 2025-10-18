@@ -28,8 +28,8 @@ export type AppointmentData = z.infer<typeof AppointmentDataSchema>;
 // This is the main function that will be called from the client
 export async function notifyAppointment(input: AppointmentData): Promise<{ success: boolean; appointmentId?: string }> {
   try {
-    // Step 1: Initialize Firebase Admin
-    // Note: In a real server environment, you'd initialize this once.
+    // Step 1: Initialize Firebase
+    // This will work on the server because the config is provided via environment variables.
     const { firestore } = initializeFirebase();
     
     // Step 2: Save the appointment to the database

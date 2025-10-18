@@ -22,11 +22,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Upload } from "lucide-react";
-import { useDoc, useFirestore, useUser, setDocumentNonBlocking, useMemoFirebase } from "@/firebase";
+import { useDoc, useFirestore, useUser, setDocumentNonBlocking, useMemoFirebase, useFirebaseApp } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
-import { updateProfile } from "firebase/auth";
+import { updateProfile, sendPasswordResetEmail, getAuth } from "firebase/auth";
 import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
+import { getApp } from "firebase/app";
 
 
 const profileSchema = z.object({
@@ -46,10 +47,12 @@ const profileBanner = PlaceHolderImages.find(p => p.id === 'profile-banner');
 
 export default function ProfilePage() {
   const { toast } = useToast();
-  const { user, isUserLoading } = useUser();
+  const { user, isUserLoading, refreshUser } = useUser();
   const firestore = useFirestore();
+  const firebaseApp = useFirebaseApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -82,7 +85,7 @@ export default function ProfilePage() {
 
   const handlePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !user || !userDocRef) return;
+    if (!file || !user || !userDocRef || !firebaseApp) return;
 
     setIsUploading(true);
 
@@ -92,26 +95,39 @@ export default function ProfilePage() {
       reader.onload = async () => {
         const dataUrl = reader.result as string;
         
-        const storage = getStorage();
+        const storage = getStorage(firebaseApp);
         const storageRef = ref(storage, `profilePictures/${user.uid}`);
 
         await uploadString(storageRef, dataUrl, 'data_url');
         const downloadURL = await getDownloadURL(storageRef);
-
+        
+        // Update both Auth and Firestore
         await updateProfile(user, { photoURL: downloadURL });
+        
+        // Non-blocking update to firestore
         setDocumentNonBlocking(userDocRef, { profilePicture: downloadURL }, { merge: true });
-
+        
+        // Force a refresh of the user object to get the new photoURL
+        await refreshUser();
+        
         toast({
           title: "Foto de perfil actualizada",
           description: "Tu nueva foto de perfil se ha guardado.",
         });
       };
-    } catch (error) {
+      reader.onerror = (error) => {
+        console.error("FileReader error:", error);
+        throw new Error("Error al leer el archivo.");
+      }
+    } catch (error: any) {
       console.error(error);
+      const description = error.code === 'storage/unauthorized' 
+        ? "Error de permisos. Revisa las reglas de seguridad de Storage."
+        : "No se pudo guardar tu nueva foto de perfil.";
       toast({
         variant: "destructive",
         title: "Error al subir la imagen",
-        description: "No se pudo guardar tu nueva foto de perfil.",
+        description,
       });
     } finally {
       setIsUploading(false);
@@ -121,24 +137,61 @@ export default function ProfilePage() {
   async function onSubmit(values: z.infer<typeof profileSchema>) {
     if (!user || !userDocRef) return;
     
-    const updatedProfile = {
-      name: values.name,
-      description: values.description,
-    };
-
-    setDocumentNonBlocking(userDocRef, updatedProfile, { merge: true });
-
-    if(user.displayName !== values.name) {
-        await updateProfile(user, { displayName: values.name });
+    try {
+        const updatedProfile = {
+          name: values.name,
+          description: values.description,
+        };
+    
+        setDocumentNonBlocking(userDocRef, updatedProfile, { merge: true });
+    
+        if(user.displayName !== values.name) {
+            await updateProfile(user, { displayName: values.name });
+            await refreshUser();
+        }
+    
+        toast({
+          title: "Perfil Actualizado",
+          description: "Tu información ha sido guardada con éxito.",
+        });
+    } catch (error) {
+        toast({
+            variant: "destructive",
+            title: "Error al actualizar",
+            description: "No se pudo guardar la información del perfil.",
+        });
     }
+  }
 
-    toast({
-      title: "Perfil Actualizado",
-      description: "Tu información ha sido guardada con éxito.",
-    });
+  const handlePasswordReset = async () => {
+      if(!user?.email) {
+           toast({
+            variant: "destructive",
+            title: "Error",
+            description: "No se pudo encontrar tu correo electrónico.",
+            });
+          return;
+      }
+      setIsSendingPasswordReset(true);
+      try {
+        await sendPasswordResetEmail(getAuth(), user.email);
+        toast({
+            title: "Correo de recuperación enviado",
+            description: "Revisa tu bandeja de entrada para cambiar tu contraseña.",
+        });
+      } catch (error) {
+           toast({
+            variant: "destructive",
+            title: "Error",
+            description: "No se pudo enviar el correo de recuperación.",
+            });
+      } finally {
+        setIsSendingPasswordReset(false);
+      }
   }
   
   const isLoading = isUserLoading || isProfileLoading;
+  const displayPhoto = user?.photoURL || userProfile?.profilePicture;
 
   if (isLoading) {
     return (
@@ -188,8 +241,8 @@ export default function ProfilePage() {
           <div className="absolute bottom-0 left-6 translate-y-1/2">
             <div className="relative h-24 w-24 rounded-full border-4 border-background md:h-32 md:w-32">
                 <Avatar className="h-full w-full">
-                  <AvatarImage src={user?.photoURL || userProfile?.profilePicture || undefined} alt={userProfile?.name || "User"} />
-                  <AvatarFallback className="text-4xl">{userProfile?.name?.charAt(0) || user?.email?.charAt(0) ||'U'}</AvatarFallback>
+                  <AvatarImage src={displayPhoto || undefined} alt={userProfile?.name || "User"} />
+                  <AvatarFallback className="text-4xl">{user?.displayName?.charAt(0) || userProfile?.name?.charAt(0) || user?.email?.charAt(0) ||'U'}</AvatarFallback>
                 </Avatar>
                 <Button 
                   variant="outline" 
@@ -197,6 +250,7 @@ export default function ProfilePage() {
                   className="absolute bottom-1 right-1 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
+                  title="Cambiar foto"
                 >
                   <Upload className="h-4 w-4" />
                   <span className="sr-only">Cambiar foto</span>
@@ -255,6 +309,24 @@ export default function ProfilePage() {
               </div>
             </form>
           </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-headline">Seguridad</CardTitle>
+          <CardDescription>Administra la seguridad de tu cuenta.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                    <h3 className="font-medium">Contraseña</h3>
+                    <p className="text-sm text-muted-foreground">Recibirás un correo para cambiar tu contraseña.</p>
+                </div>
+                <Button onClick={handlePasswordReset} disabled={isSendingPasswordReset}>
+                    {isSendingPasswordReset ? 'Enviando...' : 'Cambiar Contraseña'}
+                </Button>
+            </div>
         </CardContent>
       </Card>
     </div>

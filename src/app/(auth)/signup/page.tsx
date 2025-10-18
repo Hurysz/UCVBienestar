@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, useFirestore, setDocumentNonBlocking } from "@/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc } from "firebase/firestore";
 import { FirebaseError } from "firebase/app";
 
@@ -52,16 +52,22 @@ export default function SignupPage() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!auth || !firestore) return;
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       const user = userCredential.user;
+      
+      // Update the user's profile in Firebase Auth
+      await updateProfile(user, { displayName: values.name });
 
+      // Create the user profile in Firestore
       const userProfile = {
         id: user.uid,
         email: values.email,
         name: values.name,
         description: "",
-        profilePicture: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`
+        profilePicture: "" // Start with no profile picture
       };
 
       const userDocRef = doc(firestore, `userProfiles/${user.uid}`);

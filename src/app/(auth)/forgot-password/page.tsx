@@ -40,6 +40,14 @@ export default function ForgotPasswordPage() {
   });
 
   async function onSubmit(values: z.infer<typeof emailSchema>) {
+    if(!auth) {
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Servicio de autenticación no disponible.",
+        });
+        return;
+    }
     try {
       await sendPasswordResetEmail(auth, values.email);
       toast({
