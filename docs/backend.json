@@ -12,7 +12,7 @@
         },
         "email": {
           "type": "string",
-          "description": "User's email address (@ucvvirtual.edu.pe).",
+          "description": "User's email address, validated to be @ucvvirtual.edu.pe.",
           "format": "email"
         },
         "name": {
@@ -21,11 +21,11 @@
         },
         "description": {
           "type": "string",
-          "description": "User's profile description or bio."
+          "description": "User's self-description or bio."
         },
-        "profilePicture": {
+        "profilePictureUrl": {
           "type": "string",
-          "description": "URL to the user's profile picture.",
+          "description": "URL of the user's profile picture.",
           "format": "uri"
         }
       },
@@ -33,37 +33,6 @@
         "id",
         "email",
         "name"
-      ]
-    },
-    "ChatMessage": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ChatMessage",
-      "type": "object",
-      "description": "Represents a single message in the community chat.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the ChatMessage entity."
-        },
-        "userProfileId": {
-          "type": "string",
-          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N ChatMessage)"
-        },
-        "message": {
-          "type": "string",
-          "description": "The content of the chat message."
-        },
-        "timestamp": {
-          "type": "string",
-          "description": "Timestamp of when the message was sent.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "userProfileId",
-        "message",
-        "timestamp"
       ]
     },
     "Appointment": {
@@ -76,38 +45,38 @@
           "type": "string",
           "description": "Unique identifier for the Appointment entity."
         },
-        "userProfileId": {
+        "userId": {
           "type": "string",
-          "description": "Reference to UserProfile. The user who scheduled the appointment. (Relationship: UserProfile 1:N Appointment)"
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N Appointment)"
         },
-        "startTime": {
+        "startDateTime": {
           "type": "string",
-          "description": "Start time of the appointment.",
+          "description": "Date and time the appointment starts.",
           "format": "date-time"
         },
-        "endTime": {
+        "endDateTime": {
           "type": "string",
-          "description": "End time of the appointment.",
+          "description": "Date and time the appointment ends.",
           "format": "date-time"
         },
         "location": {
           "type": "string",
-          "description": "Location of the appointment (e.g., virtual meeting link, Los Olivos campus)."
+          "description": "Location of the appointment (e.g., virtual meeting link or Los Olivos campus)."
         },
         "description": {
           "type": "string",
-          "description": "Description or notes for the appointment."
+          "description": "Description of the appointment's purpose."
         },
         "isVirtual": {
           "type": "boolean",
-          "description": "Indicates if the appointment is virtual (true) or in-person (false)."
+          "description": "Indicates whether the appointment is virtual (true) or in-person (false)."
         }
       },
       "required": [
         "id",
-        "userProfileId",
-        "startTime",
-        "endTime",
+        "userId",
+        "startDateTime",
+        "endDateTime",
         "location",
         "isVirtual"
       ]
@@ -116,7 +85,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Resource",
       "type": "object",
-      "description": "Represents a resource (event, study material, workshop) in the resource library.",
+      "description": "Represents a resource, event, or study material in the library.",
       "properties": {
         "id": {
           "type": "string",
@@ -128,52 +97,68 @@
         },
         "description": {
           "type": "string",
-          "description": "Description of the resource."
+          "description": "Brief description of the resource."
         },
-        "categoryId": {
+        "category": {
           "type": "string",
-          "description": "Reference to Category. The category this resource belongs to. (Relationship: Category 1:N Resource)"
+          "description": "Category the resource belongs to."
         },
         "url": {
           "type": "string",
-          "description": "URL to the resource.",
+          "description": "URL or path to the resource.",
           "format": "uri"
         },
-        "fileUrl": {
+        "uploadDateTime": {
           "type": "string",
-          "description": "URL to the file related to the resource.",
-          "format": "uri"
+          "description": "Date and time the resource was uploaded.",
+          "format": "date-time"
         }
       },
       "required": [
         "id",
         "title",
         "description",
-        "categoryId"
+        "category",
+        "url"
       ]
     },
-    "Category": {
+    "ChatMessage": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Category",
+      "title": "ChatMessage",
       "type": "object",
-      "description": "Represents a category for organizing resources in the library.",
+      "description": "Represents a single chat message within the community chat.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the Category entity."
+          "description": "Unique identifier for the ChatMessage entity."
         },
-        "name": {
+        "userId": {
           "type": "string",
-          "description": "Name of the category (e.g., 'Study Materials', 'Events', 'Workshops')."
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N ChatMessage). The user who sent the message."
         },
-        "description": {
+        "userName": {
           "type": "string",
-          "description": "Description of the category."
+          "description": "The display name of the user who sent the message."
+        },
+        "userAvatar": {
+          "type": "string",
+          "description": "URL of the profile picture of the user who sent the message."
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the chat message."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of when the message was sent.",
+          "format": "date-time"
         }
       },
       "required": [
-        "id",
-        "name"
+        "userId",
+        "userName",
+        "content",
+        "timestamp"
       ]
     }
   },
@@ -182,90 +167,5 @@
       "password",
       "anonymous"
     ]
-  },
-  "firestore": {
-    "structure": [
-      {
-        "path": "/userProfiles/{userProfileId}",
-        "definition": {
-          "entityName": "UserProfile",
-          "schema": {
-            "$ref": "#/backend/entities/UserProfile"
-          },
-          "description": "Stores user profile information. Each document is identified by the user's unique ID.",
-          "params": [
-            {
-              "name": "userProfileId",
-              "description": "The unique ID of the user profile."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/community_chat_messages/{chatMessageId}",
-        "definition": {
-          "entityName": "ChatMessage",
-          "schema": {
-            "$ref": "#/backend/entities/ChatMessage"
-          },
-          "description": "Stores chat messages from all users with the @ucvvirtual.edu.pe email domain.",
-          "params": [
-            {
-              "name": "chatMessageId",
-              "description": "The unique ID of the chat message."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/appointments/{appointmentId}",
-        "definition": {
-          "entityName": "Appointment",
-          "schema": {
-            "$ref": "#/backend/entities/Appointment"
-          },
-          "description": "Stores appointment data, linked to the user who scheduled it via userProfileId.",
-          "params": [
-            {
-              "name": "appointmentId",
-              "description": "The unique ID of the appointment."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/resources/{resourceId}",
-        "definition": {
-          "entityName": "Resource",
-          "schema": {
-            "$ref": "#/backend/entities/Resource"
-          },
-          "description": "Stores information about resources (events, study materials, workshops).",
-          "params": [
-            {
-              "name": "resourceId",
-              "description": "The unique ID of the resource."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/categories/{categoryId}",
-        "definition": {
-          "entityName": "Category",
-          "schema": {
-            "$ref": "#/backend/entities/Category"
-          },
-          "description": "Stores information about resource categories.",
-          "params": [
-            {
-              "name": "categoryId",
-              "description": "The unique ID of the category."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "This Firestore structure prioritizes security, scalability, and debuggability, especially concerning authorization. It is built around the principles of Authorization Independence, Structural Segregation, Access Modeling, and Data Clarity.\n\n**Authorization Independence:** The structure is designed to avoid hierarchical authorization dependencies (`get()` calls in security rules).  Specifically, access to the `community_chat_messages` collection is granted based on the user's email domain being '@ucvvirtual.edu.pe', enforced directly within the security rules without needing to fetch user profile data.\n\n**Structural Segregation:** The structure separates data with different access requirements into distinct collections.  `userProfiles` are separated from public chat messages. This simplifies security rules, as each collection has a clear and consistent security posture.\n\n**Access Modeling:**\n*   User Profiles: Stored under `/userProfiles/{userProfileId}`. Provides clear ownership.\n*   Community Chat: Messages are stored in a flat `/community_chat_messages` collection. Access is controlled by the user's email domain.\n*   Appointments: Stored under `/appointments/{appointmentId}` with the userProfileId to find the appointments of the specific user.\n*   Resources and Categories: Reside in `/resources/{resourceId}` and `/categories/{categoryId}`, respectively, without specific ownership requirements based on the user request. A future admin role might be appropriate.\n\n**QAPs (Rules are not Filters):** The structure enables secure `list` operations. The `/community_chat_messages` collection is accessible to any user with the '@ucvvirtual.edu.pe' email domain. This allows listing messages without complex filtering in the rules.\n\n**Invariants:** The structure supports the integrity of ownership and timestamps. For example, each `ChatMessage` contains a `timestamp` field and `userProfileId` for tracking message origin."
   }
 }

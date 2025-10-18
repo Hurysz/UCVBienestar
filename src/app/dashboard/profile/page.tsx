@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
+import { FirebaseError } from "firebase/app";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,12 +23,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Upload } from "lucide-react";
-import { useDoc, useFirestore, useUser, setDocumentNonBlocking, useMemoFirebase, useFirebaseApp } from "@/firebase";
-import { doc } from "firebase/firestore";
+import { useDoc, useFirestore, useUser, useMemoFirebase, useFirebaseApp, useAuth } from "@/firebase";
+import { doc, setDoc } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
-import { updateProfile, sendPasswordResetEmail, getAuth } from "firebase/auth";
-import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
-import { getApp } from "firebase/app";
+import { updateProfile, sendPasswordResetEmail } from "firebase/auth";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { Progress } from "@/components/ui/progress";
 
 
 const profileSchema = z.object({
@@ -47,16 +48,20 @@ const profileBanner = PlaceHolderImages.find(p => p.id === 'profile-banner');
 
 export default function ProfilePage() {
   const { toast } = useToast();
-  const { user, isUserLoading, refreshUser } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const firebaseApp = useFirebaseApp();
+  const auth = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
+  const [displayPhoto, setDisplayPhoto] = useState<string | undefined>(undefined);
+
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    return doc(firestore, `userProfiles/${user.uid}`);
+    return doc(firestore, "users", user.uid);
   }, [firestore, user]);
 
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
@@ -75,67 +80,79 @@ export default function ProfilePage() {
         name: userProfile.name,
         description: userProfile.description || "",
       });
+      setDisplayPhoto(userProfile.profilePicture);
     } else if(user) {
         form.reset({
             name: user.displayName || "",
             description: "",
         })
+        setDisplayPhoto(user.photoURL || undefined);
     }
   }, [userProfile, user, form]);
 
-  const handlePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePictureUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user || !userDocRef || !firebaseApp) return;
 
     setIsUploading(true);
+    setUploadProgress(0);
 
-    try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        
-        const storage = getStorage(firebaseApp);
-        const storageRef = ref(storage, `profilePictures/${user.uid}`);
+    const storage = getStorage(firebaseApp);
+    const storageRef = ref(storage, `profilePictures/${user.uid}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
 
-        await uploadString(storageRef, dataUrl, 'data_url');
-        const downloadURL = await getDownloadURL(storageRef);
-        
-        // Update both Auth and Firestore
-        await updateProfile(user, { photoURL: downloadURL });
-        
-        // Non-blocking update to firestore
-        setDocumentNonBlocking(userDocRef, { profilePicture: downloadURL }, { merge: true });
-        
-        // Force a refresh of the user object to get the new photoURL
-        await refreshUser();
-        
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      },
+      (error) => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        console.error("Upload error:", error);
+
+        let description = `Ocurrió un error inesperado. Código: ${error.code}`;
         toast({
-          title: "Foto de perfil actualizada",
-          description: "Tu nueva foto de perfil se ha guardado.",
+          variant: "destructive",
+          title: "Error al subir la imagen",
+          description: description,
         });
-      };
-      reader.onerror = (error) => {
-        console.error("FileReader error:", error);
-        throw new Error("Error al leer el archivo.");
+      },
+      async () => {
+        try {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          
+          if(auth.currentUser) {
+            await updateProfile(auth.currentUser, { photoURL: downloadURL });
+          }
+          await setDoc(userDocRef, { profilePicture: downloadURL }, { merge: true });
+          
+          setDisplayPhoto(downloadURL);
+          
+          toast({
+            title: "Foto de perfil actualizada",
+            description: "Tu nueva foto de perfil se ha guardado.",
+          });
+        } catch (error) {
+            console.error("Error updating profile:", error);
+            const err = error as FirebaseError;
+            toast({
+                variant: "destructive",
+                title: "Error al guardar",
+                description: `No se pudo guardar la URL de la imagen en el perfil. Código: ${err.code}`,
+            });
+        } finally {
+            setIsUploading(false);
+            setUploadProgress(0);
+        }
       }
-    } catch (error: any) {
-      console.error(error);
-      const description = error.code === 'storage/unauthorized' 
-        ? "Error de permisos. Revisa las reglas de seguridad de Storage."
-        : "No se pudo guardar tu nueva foto de perfil.";
-      toast({
-        variant: "destructive",
-        title: "Error al subir la imagen",
-        description,
-      });
-    } finally {
-      setIsUploading(false);
-    }
+    );
   };
 
+
   async function onSubmit(values: z.infer<typeof profileSchema>) {
-    if (!user || !userDocRef) return;
+    if (!user || !userDocRef || !firestore) return;
     
     try {
         const updatedProfile = {
@@ -143,11 +160,10 @@ export default function ProfilePage() {
           description: values.description,
         };
     
-        setDocumentNonBlocking(userDocRef, updatedProfile, { merge: true });
+        await setDoc(userDocRef, updatedProfile, { merge: true });
     
-        if(user.displayName !== values.name) {
-            await updateProfile(user, { displayName: values.name });
-            await refreshUser();
+        if(auth.currentUser && auth.currentUser.displayName !== values.name) {
+            await updateProfile(auth.currentUser, { displayName: values.name });
         }
     
         toast({
@@ -155,6 +171,7 @@ export default function ProfilePage() {
           description: "Tu información ha sido guardada con éxito.",
         });
     } catch (error) {
+        console.error("Profile update error: ", error);
         toast({
             variant: "destructive",
             title: "Error al actualizar",
@@ -174,7 +191,7 @@ export default function ProfilePage() {
       }
       setIsSendingPasswordReset(true);
       try {
-        await sendPasswordResetEmail(getAuth(), user.email);
+        await sendPasswordResetEmail(auth, user.email);
         toast({
             title: "Correo de recuperación enviado",
             description: "Revisa tu bandeja de entrada para cambiar tu contraseña.",
@@ -191,8 +208,7 @@ export default function ProfilePage() {
   }
   
   const isLoading = isUserLoading || isProfileLoading;
-  const displayPhoto = user?.photoURL || userProfile?.profilePicture;
-
+  
   if (isLoading) {
     return (
         <div className="space-y-6">
@@ -237,30 +253,33 @@ export default function ProfilePage() {
       />
       <Card className="overflow-hidden">
         <div className="relative h-32 md:h-48">
-          {profileBanner && <Image src={profileBanner.imageUrl} alt="Profile banner" layout="fill" objectFit="cover" data-ai-hint={profileBanner.imageHint} />}
+          {profileBanner && <Image src={profileBanner.imageUrl} alt="Profile banner" fill objectFit="cover" data-ai-hint={profileBanner.imageHint} />}
           <div className="absolute bottom-0 left-6 translate-y-1/2">
-            <div className="relative h-24 w-24 rounded-full border-4 border-background md:h-32 md:w-32">
+            <div className="relative h-24 w-24 rounded-full border-4 border-background md:h-32 md:w-32 group">
                 <Avatar className="h-full w-full">
                   <AvatarImage src={displayPhoto || undefined} alt={userProfile?.name || "User"} />
                   <AvatarFallback className="text-4xl">{user?.displayName?.charAt(0) || userProfile?.name?.charAt(0) || user?.email?.charAt(0) ||'U'}</AvatarFallback>
                 </Avatar>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="absolute bottom-1 right-1 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  title="Cambiar foto"
+                <div 
+                  className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
                 >
-                  <Upload className="h-4 w-4" />
-                  <span className="sr-only">Cambiar foto</span>
-                </Button>
+                  <Upload className="h-8 w-8 text-white" />
+                </div>
+                 {isUploading && (
+                  <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center p-2">
+                    <Progress value={uploadProgress} className="h-2 w-3/4" />
+                  </div>
+                 )}
             </div>
           </div>
         </div>
-        <div className="pt-16 px-6 pb-6 md:pt-20">
+        <div className="pt-20 px-6 pb-6 md:pt-24">
             <h1 className="text-2xl font-bold font-headline">{form.getValues("name")}</h1>
             <p className="text-muted-foreground">{user?.email}</p>
+        </div>
+        <div className="px-6 pb-6">
+            <p className="text-xs text-muted-foreground">Sube tu foto de perfil. Acepta JPG o PNG, máx 5MB.</p>
         </div>
       </Card>
 

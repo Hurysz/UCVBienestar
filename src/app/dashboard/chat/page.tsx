@@ -6,18 +6,29 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SendHorizonal } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { useCollection, useFirestore, useUser, addDocumentNonBlocking, useMemoFirebase } from "@/firebase";
-import { collection, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
+import { useCollection, useFirestore, useUser, useMemoFirebase, useDoc } from "@/firebase";
+import { collection, query, orderBy, serverTimestamp, Timestamp, doc, addDoc } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 type ChatMessage = {
   id: string;
-  userProfileId: string;
+  userId: string;
   userName: string;
   userAvatar: string;
-  message: string;
+  content: string;
   timestamp: Timestamp;
 };
+
+type UserProfile = {
+    id: string;
+    name: string;
+    email: string;
+    description?: string;
+    profilePicture?: string;
+}
+
 
 export default function ChatPage() {
   const [newMessage, setNewMessage] = useState("");
@@ -25,9 +36,16 @@ export default function ChatPage() {
   const { user } = useUser();
   const firestore = useFirestore();
 
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, "users", user.uid);
+  }, [firestore, user]);
+
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
+
   const messagesCollection = useMemoFirebase(() => {
     if (!firestore) return null;
-    return collection(firestore, 'community_chat_messages');
+    return collection(firestore, 'chat_messages');
   }, [firestore]);
 
   const messagesQuery = useMemoFirebase(() => {
@@ -35,24 +53,34 @@ export default function ChatPage() {
     return query(messagesCollection, orderBy("timestamp", "asc"));
   }, [messagesCollection]);
 
-  const { data: messages, isLoading } = useCollection<ChatMessage>(messagesQuery);
+  const { data: messages, isLoading: areMessagesLoading } = useCollection<ChatMessage>(messagesQuery);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !firestore) return;
+    if (!newMessage.trim() || !user || !firestore || !messagesCollection || !userProfile) return;
+
+    const userName = userProfile?.name || user?.displayName || "Usuario Anónimo";
+    const userAvatarUrl = userProfile?.profilePicture || user?.photoURL || "";
 
     const messageData = {
-      userProfileId: user.uid,
-      userName: user.displayName || "Usuario Anónimo",
-      userAvatar: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`,
-      message: newMessage,
+      userId: user.uid,
+      userName: userName,
+      userAvatar: userAvatarUrl,
+      content: newMessage,
       timestamp: serverTimestamp(),
     };
     
-    if (messagesCollection) {
-        await addDocumentNonBlocking(messagesCollection, messageData);
-        setNewMessage("");
-    }
+    addDoc(messagesCollection, messageData).catch(error => {
+        errorEmitter.emit(
+            'permission-error',
+            new FirestorePermissionError({
+                path: messagesCollection.path,
+                operation: 'create',
+                requestResourceData: messageData
+            })
+        )
+    });
+    setNewMessage("");
   };
   
   useEffect(() => {
@@ -69,6 +97,9 @@ export default function ChatPage() {
     return new Date(timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  // Disable send if message is empty, user is not logged in, or the profile is still loading.
+  const isSendDisabled = !newMessage.trim() || !user || isProfileLoading;
+
   return (
     <div className="flex h-[calc(100vh-theme(spacing.28))] flex-col">
        <div>
@@ -81,7 +112,7 @@ export default function ChatPage() {
         </div>
         <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
           <div className="space-y-6">
-            {isLoading && (
+            {areMessagesLoading && (
               <div className="space-y-4">
                 <Skeleton className="h-16 w-3/4" />
                 <Skeleton className="h-16 w-3/4 ml-auto" />
@@ -92,19 +123,19 @@ export default function ChatPage() {
               <div
                 key={message.id}
                 className={`flex items-start gap-3 ${
-                  message.userProfileId === user?.uid ? "flex-row-reverse" : ""
+                  message.userId === user?.uid ? "flex-row-reverse" : ""
                 }`}
               >
                 <Avatar>
                   <AvatarImage src={message.userAvatar} />
-                  <AvatarFallback>{message.userName?.charAt(0) || 'U'}</AvatarFallback>
+                  <AvatarFallback>{message.userName?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
-                <div className={`flex flex-col ${message.userProfileId === user?.uid ? "items-end" : "items-start"}`}>
-                  <div className={`rounded-lg p-3 max-w-sm ${message.userProfileId === user?.uid ? "bg-primary text-primary-foreground" : "bg-accent"}`}>
-                    <p className="text-sm">{message.message}</p>
+                <div className={`flex flex-col ${message.userId === user?.uid ? "items-end" : "items-start"}`}>
+                  <div className={`rounded-lg p-3 max-w-sm ${message.userId === user?.uid ? "bg-primary text-primary-foreground" : "bg-accent"}`}>
+                    <p className="text-sm">{message.content}</p>
                   </div>
                   <span className="text-xs text-muted-foreground mt-1">
-                    {message.userProfileId === user?.uid ? "Tú" : message.userName}, {formatTime(message.timestamp)}
+                    {message.userId === user?.uid ? "Tú" : message.userName}, {formatTime(message.timestamp)}
                   </span>
                 </div>
               </div>
@@ -116,11 +147,11 @@ export default function ChatPage() {
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Escribe un mensaje de apoyo..."
+              placeholder={!user ? "Inicia sesión para chatear" : (isProfileLoading ? "Cargando perfil..." : "Escribe un mensaje de apoyo...")}
               autoComplete="off"
-              disabled={!user}
+              disabled={!user || isProfileLoading}
             />
-            <Button type="submit" size="icon" disabled={!newMessage.trim() || !user}>
+            <Button type="submit" size="icon" disabled={isSendDisabled}>
               <SendHorizonal className="h-5 w-5" />
               <span className="sr-only">Enviar mensaje</span>
             </Button>

@@ -17,9 +17,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, useFirestore, setDocumentNonBlocking } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { FirebaseError } from "firebase/app";
 
 const formSchema = z.object({
@@ -52,26 +52,30 @@ export default function SignupPage() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!auth || !firestore) return;
+    if (!auth || !firestore) {
+      toast({
+        variant: "destructive",
+        title: "Error de configuración",
+        description: "Los servicios de Firebase no están disponibles.",
+      });
+      return;
+    }
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       const user = userCredential.user;
       
-      // Update the user's profile in Firebase Auth
       await updateProfile(user, { displayName: values.name });
 
-      // Create the user profile in Firestore
       const userProfile = {
         id: user.uid,
         email: values.email,
         name: values.name,
         description: "",
-        profilePicture: "" // Start with no profile picture
+        profilePicture: ""
       };
 
-      const userDocRef = doc(firestore, `userProfiles/${user.uid}`);
-      setDocumentNonBlocking(userDocRef, userProfile, { merge: true });
+      await setDoc(doc(firestore, "users", user.uid), userProfile);
 
       toast({
         title: "Registro exitoso",
@@ -80,11 +84,11 @@ export default function SignupPage() {
       router.push("/login");
 
     } catch (error) {
-       console.error(error);
-      let description = "Ocurrió un error inesperado.";
+       console.error("Error durante el registro:", error);
+      let description = "Ocurrió un error inesperado durante el registro.";
       if (error instanceof FirebaseError) {
         if (error.code === 'auth/email-already-in-use') {
-          description = "Este correo electrónico ya está en uso.";
+          description = "Este correo electrónico ya está registrado. Intenta iniciar sesión.";
         }
       }
       toast({

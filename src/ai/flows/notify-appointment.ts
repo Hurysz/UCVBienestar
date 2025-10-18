@@ -1,19 +1,18 @@
 'use server';
-
 /**
- * @fileOverview A flow for handling new appointment notifications.
- *
- * - notifyAppointment - Saves appointment to Firestore and simulates sending an email.
- * - AppointmentData - The Zod schema for the appointment data.
+ * @fileOverview A server-side flow to handle sending an appointment notification.
+ * 
+ * - notifyAppointment - A function that sends an email notification using Resend.
  */
 
-import { z } from 'zod';
-import { collection, addDoc } from 'firebase/firestore';
-import { initializeFirebase } from '@/firebase';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
+import { Resend } from 'resend';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-// Define the input schema using Zod
-const AppointmentDataSchema = z.object({
-  userProfileId: z.string(),
+const NotifyAppointmentInputSchema = z.object({
+  userId: z.string(),
   userEmail: z.string(),
   userName: z.string(),
   startTime: z.string().datetime(),
@@ -22,50 +21,71 @@ const AppointmentDataSchema = z.object({
   description: z.string(),
   isVirtual: z.boolean(),
 });
-export type AppointmentData = z.infer<typeof AppointmentDataSchema>;
+export type NotifyAppointmentInput = z.infer<typeof NotifyAppointmentInputSchema>;
 
-
-// This is the main function that will be called from the client
-export async function notifyAppointment(input: AppointmentData): Promise<{ success: boolean; appointmentId?: string }> {
-  try {
-    // Step 1: Initialize Firebase
-    // This will work on the server because the config is provided via environment variables.
-    const { firestore } = initializeFirebase();
-    
-    // Step 2: Save the appointment to the database
-    const docRef = await addDoc(collection(firestore, 'appointments'), input);
-    console.log('Appointment saved with ID:', docRef.id);
-    
-    // Step 3: "Send" the notification email (simulation)
-    const recipient = 'lfernandezhuaringa@gmail.com';
-    const subject = `Nueva Cita Agendada: ${input.userName}`;
-    const body = `
-      Se ha agendado una nueva cita con los siguientes detalles:
-
-      - Usuario: ${input.userName} (${input.userEmail})
-      - Profesional: ${input.location}
-      - Fecha y Hora de Inicio: ${new Date(input.startTime).toLocaleString('es-PE')}
-      - Motivo: ${input.description}
-
-      Este es un correo autogenerado.
-    `;
-    
-    // In a real application, you would integrate with an email service like SendGrid, Resend, etc.
-    // For this prototype, we'll just log it to the server console.
-    console.log('--- SIMULATING EMAIL NOTIFICATION ---');
-    console.log(`To: ${recipient}`);
-    console.log(`Subject: ${subject}`);
-    console.log('Body:');
-    console.log(body);
-    console.log('------------------------------------');
-
-    console.log('Appointment notification flow completed successfully.');
-    return { success: true, appointmentId: docRef.id };
-
-  } catch (error) {
-    console.error('Error in notifyAppointment server action:', error);
-    // It's better to throw the error so the client can handle it.
-    // Avoid throwing generic new Error() to preserve the original error information.
-    throw error;
-  }
+export async function notifyAppointment(input: NotifyAppointmentInput): Promise<{ success: boolean }> {
+  return notifyAppointmentFlow(input);
 }
+
+// ============== CONFIGURACIÓN DE CORREO ==============
+// Esta es la dirección de correo a la que se enviarán las notificaciones de nuevas citas.
+// Puedes cambiarla por el correo del administrador o del profesional.
+const NOTIFICATION_RECIPIENT = 'larssonfhm@gmail.com';
+// =====================================================
+
+
+const notifyAppointmentFlow = ai.defineFlow(
+  {
+    name: 'notifyAppointmentFlow',
+    inputSchema: NotifyAppointmentInputSchema,
+    outputSchema: z.object({ success: z.boolean() }),
+  },
+  async (input) => {
+    try {
+      // 1. Enviar correo usando Resend.
+      // El sistema busca una clave de API en las variables de entorno (archivo .env).
+      const resendApiKey = process.env.RESEND_API_KEY;
+
+      // Si la clave no existe o está vacía, el flujo muestra una advertencia y termina exitosamente
+      // para no bloquear al usuario. Los correos no se enviarán en este caso.
+      if (!resendApiKey) {
+        console.warn('RESEND_API_KEY is not configured. Skipping email notification.');
+        return { success: true };
+      }
+      
+      const resend = new Resend(resendApiKey);
+
+      const subject = `Nueva Cita Agendada: ${input.userName}`;
+      const body = `
+        <p>Se ha agendado una nueva cita con los siguientes detalles:</p>
+        <ul>
+          <li><strong>Usuario:</strong> ${input.userName} (${input.userEmail})</li>
+          <li><strong>Profesional:</strong> ${input.location}</li>
+          <li><strong>Modalidad:</strong> ${input.isVirtual ? 'Virtual' : 'Presencial'}</li>
+          <li><strong>Fecha y Hora de Inicio:</strong> ${format(new Date(input.startTime), "EEEE, d 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es })}</li>
+          <li><strong>Motivo:</strong> ${input.description}</li>
+        </ul>
+      `;
+
+      // El remitente ('from') debe ser un dominio verificado en tu cuenta de Resend.
+      // 'onboarding@resend.dev' es un remitente de prueba que viene por defecto.
+      await resend.emails.send({
+        from: 'UCVBienestar <onboarding@resend.dev>', 
+        to: NOTIFICATION_RECIPIENT,
+        subject: subject,
+        html: body,
+      });
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('Error in notifyAppointmentFlow:', error);
+      // Lanza un error más claro para que el cliente lo pueda manejar.
+      if (error instanceof Error) {
+        // Evita exponer detalles internos como 'resend' o claves de API.
+        throw new Error(`No se pudo enviar la notificación por correo: ${error.message}`);
+      }
+      throw new Error('Ocurrió un error desconocido al enviar la notificación.');
+    }
+  }
+);

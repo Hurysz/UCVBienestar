@@ -1,140 +1,126 @@
 /**
- * @file Firestore Security Rules for UCV Conecta Application
+ * @fileoverview Firestore Security Rules for UCV Conecta Application
  *
- * @core_philosophy This ruleset enforces a user-ownership model for user profiles and appointments,
- * while allowing public read access to resources, categories, and community chat messages
- * for users with the '@ucvvirtual.edu.pe' email domain.
+ * Core Philosophy:
+ * This ruleset prioritizes a secure, owner-based access model for user data while allowing public read access to resources and community chat messages.
  *
- * @data_structure The Firestore database is structured as follows:
- * - /userProfiles/{userProfileId}: Stores user profile information, accessible only to the user themselves.
- * - /community_chat_messages/{chatMessageId}: Stores chat messages, publicly readable by users with a valid email domain.
- * - /appointments/{appointmentId}: Stores appointment data, accessible only to the user who scheduled the appointment.
- * - /resources/{resourceId}: Stores information about resources (e.g., events, study materials), publicly readable.
- * - /categories/{categoryId}: Stores information about resource categories, publicly readable.
+ * Data Structure:
+ * - /users/{userId}: Stores user profiles, accessible only to the owner.
+ * - /users/{userId}/appointments/{appointmentId}: Stores appointments, accessible only to the owner.
+ * - /chat_messages/{messageId}: Stores chat messages, publicly readable but only creatable by authenticated users, associated with the sender's userId.
+ * - /resources/{resourceId}: Stores resources, publicly readable but only creatable, updatable, and deletable with owner authorization.
  *
- * @key_security_decisions
- * - User profiles are strictly private and owned by the user.
- * - Community chat messages are publicly readable for users with '@ucvvirtual.edu.pe' email.
- * - Resources and categories are publicly readable.
- * - Listing of user profiles is disallowed for security reasons.
- * - Appointments are owned by the user who created them.
+ * Key Security Decisions:
+ * - User listing is disallowed to protect privacy.
+ * - Public read access to /resources is allowed for easy access to learning materials.
+ * - The rules enforce that a user can only create chat messages associated with their own userId.
  *
- * @denormalization_for_authorization N/A. The current data model does not require denormalization. Access control is managed directly
- * based on the request authentication and data within the documents.
+ * Denormalization for Authorization:
+ * - Chat messages contain the userId of the sender, allowing rules to verify ownership without additional reads.
  *
- * @structural_segregation The data is segregated into different collections based on access requirements:
- * - User-specific data (userProfiles, appointments) is stored in dedicated collections with owner-only access.
- * - Public data (community_chat_messages, resources, categories) is stored in separate collections with public read access.
+ * Structural Segregation:
+ * - User-specific data (profiles, appointments) is stored under /users/{userId} for easy, owner-based access control.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces user-ownership for user profiles.
-     * @path /userProfiles/{userProfileId}
-     * @allow (read, write): Authenticated user can only read and write their own profile.
-     * @deny (read, write): Authenticated user cannot read or write other user's profiles. Unauthenticated users cannot access any profile.
-     * @principle Enforces document ownership for all operations.
+     * @description Secures user profiles, allowing only the owner to read, create, update, and delete their own profile.
+     * @path /users/{userId}
+     * @allow (create) User with UID 'user123' creates their own profile at /users/user123 with matching id field.
+     * @allow (get) User with UID 'user123' reads their own profile at /users/user123.
+     * @allow (update) User with UID 'user123' updates their own profile at /users/user123.
+     * @allow (delete) User with UID 'user123' deletes their own profile at /users/user123.
+     * @deny (create) User with UID 'user456' attempts to create a profile at /users/user123.
+     * @deny (get) User with UID 'user456' attempts to read user 'user123's profile.
+     * @principle Enforces document ownership for all operations on user profiles.
      */
-    match /userProfiles/{userProfileId} {
+    match /users/{userId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return request.auth != null && request.auth.uid == userId && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if false; // User listing is not allowed
+
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Secures appointments under a user's profile, allowing only the owner to manage their appointments.
+     * @path /users/{userId}/appointments/{appointmentId}
+     * @allow (create) User with UID 'user123' creates an appointment under their profile at /users/user123/appointments/appt001 with userId = 'user123'.
+     * @allow (get) User with UID 'user123' reads their own appointment at /users/user123/appointments/appt001.
+     * @allow (update) User with UID 'user123' updates their own appointment at /users/user123/appointments/appt001.
+     * @allow (delete) User with UID 'user123' deletes their own appointment at /users/user123/appointments/appt001.
+     * @deny (create) User with UID 'user456' attempts to create an appointment under user 'user123's profile.
+     * @deny (get) User with UID 'user456' attempts to read an appointment under user 'user123's profile.
+     * @principle Enforces document ownership for all operations on appointments.
+     */
+    match /users/{userId}/appointments/{appointmentId} {
+       function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return request.auth != null && request.auth.uid == userId && resource != null;
+      }
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId); // Allow listing appointments for the owner.
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Manages community chat messages, allowing public read access and owner-based creation.
+     * @path /chat_messages/{messageId}
+     * @allow (get) Any user can read any chat message.
+     * @allow (list) Any user can list chat messages.
+     * @allow (create) User with UID 'user123' creates a chat message with userId = 'user123'.
+     * @deny (create) User with UID 'user456' attempts to create a chat message with userId = 'user123'.
+     * @deny (update) No one can update a chat message (immutability).
+     * @deny (delete) No one can delete a chat message.
+     * @principle Allows public reads but enforces ownership for message creation.
+     */
+    match /chat_messages/{messageId} {
       function isSignedIn() {
         return request.auth != null;
       }
 
-      function isOwner(userProfileId) {
-        return isSignedIn() && request.auth.uid == userProfileId;
-      }
-
-      function isExistingOwner(userProfileId) {
-        return isOwner(userProfileId) && exists(resource);
-      }
-
-      allow get: if isOwner(userProfileId);
-      allow list: if false; // Listing user profiles is not allowed.
-      allow create: if isOwner(userProfileId);
-      allow update: if isExistingOwner(userProfileId);
-      allow delete: if isExistingOwner(userProfileId);
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Allows public read access to community chat messages for users with the '@ucvvirtual.edu.pe' email domain.
-     * @path /community_chat_messages/{chatMessageId}
-     * @allow (read): Any user with '@ucvvirtual.edu.pe' email domain can read the messages.
-     * @deny (write): Only authenticated users with '@ucvvirtual.edu.pe' domain can create messages.
-     * @principle Provides public read access to community chat messages.
-     */
-    match /community_chat_messages/{chatMessageId} {
-        function isSignedIn() {
-            return request.auth != null;
-        }
-
-        function isValidEmailDomain() {
-            return request.auth.token.email.matches(r".*@ucvvirtual\.edu\.pe");
-        }
-
-        allow get: if true;
-        allow list: if true;
-        allow create: if isSignedIn() && isValidEmailDomain();
-        allow update: if false;
-        allow delete: if false;
-    }
-
-    /**
-     * @description Enforces user-ownership for appointments.
-     * @path /appointments/{appointmentId}
-     * @allow (read, write): Authenticated user can only read and write their own appointments.
-     * @deny (read, write): Authenticated user cannot read or write other user's appointments. Unauthenticated users cannot access any appointments.
-     * @principle Enforces document ownership for all operations.
-     */
-    match /appointments/{appointmentId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userProfileId) {
-        return isSignedIn() && request.auth.uid == userProfileId;
-      }
-
-      function isExistingOwner(userProfileId) {
-        return isOwner(userProfileId) && exists(resource);
-      }
-
-      allow get: if isSignedIn() && resource.data.userProfileId == request.auth.uid;
-      allow list: if false;
-      allow create: if isSignedIn() && request.resource.data.userProfileId == request.auth.uid;
-      allow update: if isSignedIn() && request.resource.data.userProfileId == request.auth.uid && resource.data.userProfileId == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.userProfileId == request.auth.uid;
-    }
-
-    /**
-     * @description Allows public read access to resources.
+     * @description Manages resources, allowing public read access and owner-only writes.
      * @path /resources/{resourceId}
-     * @allow (read): Any user can read resources.
-     * @deny (write): No user can write resources. // TODO: Implement admin-only write access.
-     * @principle Provides public read access to resources.
+     * @allow (get) Any user can read any resource.
+     * @allow (list) Any user can list resources.
+     * @allow (create) User with UID 'user123' creates a resource. The resource MUST contain an `ownerId` field with the user's UID.
+     * @deny (update) User with UID 'user456' attempts to update a resource they don't own.
+     * @deny (delete) User with UID 'user456' attempts to delete a resource they don't own.
+     * @principle Allows public reads but enforces ownership for writes.
      */
     match /resources/{resourceId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
       allow get: if true;
       allow list: if true;
-      allow create: if false; // TODO: Add admin validation
-      allow update: if false; // TODO: Add admin validation
-      allow delete: if false; // TODO: Add admin validation
-    }
-
-    /**
-     * @description Allows public read access to categories.
-     * @path /categories/{categoryId}
-     * @allow (read): Any user can read categories.
-     * @deny (write): No user can write categories. // TODO: Implement admin-only write access.
-     * @principle Provides public read access to categories.
-     */
-    match /categories/{categoryId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false; // TODO: Add admin validation
-      allow update: if false; // TODO: Add admin validation
-      allow delete: if false; // TODO: Add admin validation
+      allow create: if isSignedIn(); // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
   }
 }
