@@ -70,6 +70,29 @@
         "isVirtual": {
           "type": "boolean",
           "description": "Indicates whether the appointment is virtual (true) or in-person (false)."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the appointment.",
+          "enum": [
+            "scheduled",
+            "cancelled",
+            "completed"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp of when the appointment was created.",
+          "format": "date-time"
+        },
+        "cancelledAt": {
+          "type": "string",
+          "description": "Timestamp of when the appointment was cancelled.",
+          "format": "date-time"
+        },
+        "feedback": {
+          "type": "string",
+          "description": "Feedback provided by the user after the appointment."
         }
       },
       "required": [
@@ -78,48 +101,9 @@
         "startDateTime",
         "endDateTime",
         "location",
-        "isVirtual"
-      ]
-    },
-    "Resource": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Resource",
-      "type": "object",
-      "description": "Represents a resource, event, or study material in the library.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Resource entity."
-        },
-        "title": {
-          "type": "string",
-          "description": "Title of the resource."
-        },
-        "description": {
-          "type": "string",
-          "description": "Brief description of the resource."
-        },
-        "category": {
-          "type": "string",
-          "description": "Category the resource belongs to."
-        },
-        "url": {
-          "type": "string",
-          "description": "URL or path to the resource.",
-          "format": "uri"
-        },
-        "uploadDateTime": {
-          "type": "string",
-          "description": "Date and time the resource was uploaded.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "title",
-        "description",
-        "category",
-        "url"
+        "isVirtual",
+        "status",
+        "createdAt"
       ]
     },
     "ChatMessage": {
@@ -164,8 +148,27 @@
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous"
+      "password"
     ]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores public profiles for all users."
+    },
+    "/users/{userId}/appointments/{appointmentId}": {
+        "schema": {
+            "$ref": "#/entities/Appointment"
+        },
+        "description": "Stores appointments for a specific user."
+    },
+    "/chat_messages/{messageId}": {
+        "schema": {
+            "$ref": "#/entities/ChatMessage"
+        },
+        "description": "Stores all messages for the community chat."
+    }
   }
 }

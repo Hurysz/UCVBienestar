@@ -87,7 +87,7 @@ export default function AppointmentsPage() {
       const startTime = new Date(values.date);
       startTime.setHours(hours, minutes, 0, 0);
 
-      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+      const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); // Add 2 hours for the session
       
       const appointmentId = `${user.uid}_${startTime.getTime()}`;
       const appointmentRef = doc(firestore, `users/${user.uid}/appointments`, appointmentId);
@@ -100,7 +100,10 @@ export default function AppointmentsPage() {
         location: values.professional,
         description: values.reason,
         isVirtual: values.modality === 'virtual',
+        status: 'scheduled',
         createdAt: serverTimestamp(),
+        cancelledAt: null,
+        feedback: ''
       });
       
       toast({

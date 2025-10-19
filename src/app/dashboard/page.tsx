@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HeartHandshake, Calendar, Library, ArrowRight } from "lucide-react";
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
+import { AppointmentsList } from "@/components/appointments-list";
 
 const quickLinks = [
   {
@@ -54,6 +55,8 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      <AppointmentsList />
 
        <Card>
         <CardHeader>

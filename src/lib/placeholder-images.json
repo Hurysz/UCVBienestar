@@ -26,21 +26,39 @@
     },
     {
       "id": "resource-1",
-      "description": "A person studying in a library",
-      "imageUrl": "https://images.unsplash.com/flagged/photo-1557699331-4ffdad25140e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxsaWJyYXJ5JTIwc3R1ZHl8ZW58MHx8fHwxNzYwNzYzNzQzfDA&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "library study"
+      "description": "An open book on a table",
+      "imageUrl": "https://images.unsplash.com/photo-1618866569218-0fd6b98331ff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxib29rJTIwdGFibGV8ZW58MHx8fHwxNzYwNzM3NTA4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "book table"
     },
     {
       "id": "resource-2",
-      "description": "A group of students collaborating",
-      "imageUrl": "https://images.unsplash.com/photo-1758270704787-615782711641?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxzdHVkZW50cyUyMGNvbGxhYm9yYXRpb258ZW58MHx8fHwxNzYwNzYxNDA5fDA&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "students collaboration"
+      "description": "A person reading a scientific paper",
+      "imageUrl": "https://images.unsplash.com/photo-1652979775179-d81a2e9748c4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxyZWFkaW5nJTIwcGFwZXJ8ZW58MHx8fHwxNzYwODMwNTA3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "reading paper"
     },
     {
       "id": "resource-3",
-      "description": "An online event on a laptop screen",
-      "imageUrl": "https://images.unsplash.com/photo-1712904140880-d0d49319784c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxvbmxpbmUlMjBldmVudHxlbnwwfHx8fDE3NjA3NjczODF8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "online event"
+      "description": "A collection of academic journals",
+      "imageUrl": "https://images.unsplash.com/photo-1660479123634-2c700dfbbbdb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxhY2FkZW1pYyUyMGpvdXJuYWxzfGVufDB8fHx8MTc2MDc3NjE0NXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "academic journals"
+    },
+    {
+      "id": "resource-4",
+      "description": "A brain scan on a computer screen",
+      "imageUrl": "https://images.unsplash.com/photo-1549925245-f20a1bac6454?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxicmFpbiUyMHNjYW58ZW58MHx8fHwxNzYwNzU2NjYyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "brain scan"
+    },
+    {
+      "id": "resource-5",
+      "description": "A diagram showing connections in the brain",
+      "imageUrl": "https://images.unsplash.com/photo-1716930138545-13de5eb3c5c1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8YnJhaW4lMjBkaWFncmFtfGVufDB8fHx8MTc2MDgzMDUwN3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "brain diagram"
+    },
+    {
+      "id": "resource-6",
+      "description": "A world map with highlighted regions",
+      "imageUrl": "https://images.unsplash.com/photo-1723306744533-bed5a4f696dc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHx3b3JsZCUyMG1hcHxlbnwwfHx8fDE3NjA4MzA1MDd8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "world map"
     },
     {
       "id": "profile-banner",
