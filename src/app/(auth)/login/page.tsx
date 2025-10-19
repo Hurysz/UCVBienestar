@@ -13,13 +13,16 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
+import { PhrasesCarousel } from "@/components/phrases-carousel";
+import { cn } from "@/lib/utils";
+
 
 const formSchema = z.object({
   email: z.string().email({ message: "Por favor, introduce un correo válido." }).refine(
@@ -67,57 +70,63 @@ export default function LoginPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-headline text-2xl">Bienvenido de nuevo</CardTitle>
-        <CardDescription>Inicia sesión para conectar con tu comunidad.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Correo Electrónico</FormLabel>
-                  <FormControl>
-                    <Input placeholder="nombre.apellido@ucvvirtual.edu.pe" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contraseña</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="********" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex items-center justify-between">
-              <Link href="/forgot-password">
-                <Button variant="link" className="p-0 h-auto font-normal text-sm">¿Olvidaste tu contraseña?</Button>
-              </Link>
-            </div>
-            <Button type="submit" className="w-full font-bold" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? 'Iniciando Sesión...' : 'Iniciar Sesión'}
-            </Button>
-          </form>
-        </Form>
-        <div className="mt-6 text-center text-sm">
-          ¿No tienes una cuenta?{" "}
-          <Link href="/signup" className="font-semibold text-primary hover:underline">
-            Regístrate
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
+    <>
+      <div className="text-center mb-6">
+          <h1 className="font-headline text-3xl animated-rgb-text">Bienvenido de nuevo</h1>
+            <div className="pt-4">
+              <PhrasesCarousel />
+          </div>
+      </div>
+      <Card className="w-full max-w-lg">
+        <CardContent className="pt-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Correo Electrónico</FormLabel>
+                    <FormControl>
+                      <Input placeholder="nombre.apellido@ucvvirtual.edu.pe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contraseña</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="********" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="flex items-center justify-between">
+                <Link href="/forgot-password">
+                  <Button variant="link" className="p-0 h-auto font-normal text-sm">¿Olvidaste tu contraseña?</Button>
+                </Link>
+              </div>
+              <Button type="submit" className={cn("w-full font-bold h-auto p-0", !form.formState.isSubmitting && "animated-rgb-button")} disabled={form.formState.isSubmitting}>
+                  <span>
+                      {form.formState.isSubmitting ? 'Iniciando Sesión...' : 'Iniciar Sesión'}
+                  </span>
+              </Button>
+            </form>
+          </Form>
+          <div className="mt-6 text-center text-sm">
+            ¿No tienes una cuenta?{" "}
+            <Link href="/signup" className="font-semibold text-primary hover:underline">
+              Regístrate
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }

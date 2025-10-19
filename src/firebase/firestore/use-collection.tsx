@@ -8,6 +8,7 @@ import {
   FirestoreError,
   QuerySnapshot,
   CollectionReference,
+  Timestamp,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -37,6 +38,37 @@ export interface InternalQuery extends Query<DocumentData> {
   }
 }
 
+// Function to recursively serialize Firestore Timestamps and other non-serializable data
+const serializeData = (data: any): any => {
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+
+  // Check if it's a Firestore Timestamp-like object
+  if (typeof data.seconds === 'number' && typeof data.nanoseconds === 'number') {
+    return {
+      _seconds: data.seconds,
+      _nanoseconds: data.nanoseconds,
+      _isFirebaseTimestamp: true, // Marker for deserialization
+    };
+  }
+  
+  // Handle arrays
+  if (Array.isArray(data)) {
+    return data.map(serializeData);
+  }
+
+  // Handle plain objects
+  const newObj: { [key: string]: any } = {};
+  for (const key in data) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      newObj[key] = serializeData(data[key]);
+    }
+  }
+  return newObj;
+};
+
+
 /**
  * React hook to subscribe to a Firestore collection or query in real-time.
  * Handles nullable references/queries.
@@ -58,7 +90,7 @@ export function useCollection<T = any>(
   type StateDataType = ResultItemType[] | null;
 
   const [data, setData] = useState<StateDataType>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
@@ -78,7 +110,9 @@ export function useCollection<T = any>(
       (snapshot: QuerySnapshot<DocumentData>) => {
         const results: ResultItemType[] = [];
         for (const doc of snapshot.docs) {
-          results.push({ ...(doc.data() as T), id: doc.id });
+           const docData = doc.data() as T;
+           const serializedData = serializeData(docData);
+           results.push({ ...serializedData, id: doc.id });
         }
         setData(results);
         setError(null);

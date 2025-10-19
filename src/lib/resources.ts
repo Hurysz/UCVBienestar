@@ -10,6 +10,22 @@ export type Resource = {
   url: string;
 };
 
+export type WorkshopActivity = {
+  id: string;
+  title: string;
+  votes: number;
+  voted?: boolean;
+  date?: string;
+  time?: string;
+};
+
+export type WorkshopCategory = {
+  id: string;
+  title: string;
+  activities: WorkshopActivity[];
+};
+
+
 export const resources: Resource[] = [
     {
         "id": "res-1",
@@ -76,5 +92,69 @@ export const resources: Resource[] = [
         "content": "Este estudio analiza los gastos catastróficos de salud (CHE) y de bolsillo (OOP) en Meta, Colombia, antes y durante la COVID-19. Las personas con tendencia a trastornos mentales (SRQ+) presentan mayores probabilidades de incurrir en gastos OOP y marginalmente mayores en CHE. Se subraya la necesidad de salvaguardas financieras y programas integrales de salud mental para comunidades marginadas.",
         "imageId": "resource-6",
         "url": "https://www.scopus.com/pages/publications/105005806175?origin=resultslist"
+    },
+    {
+        "id": "herr-1",
+        "title": "Reto de 2 Minutos: Respiración Guiada para Calmar la Mente",
+        "description": "Una herramienta interactiva con un cronómetro que te guía a través de la técnica de 'respiración de caja' para reducir el estrés rápidamente.",
+        "category": "herramienta",
+        "content": "...",
+        "imageId": "resource-4",
+        "url": "#"
+    },
+    {
+        "id": "herr-2",
+        "title": "Pausa Activa Guiada: Estiramientos de 3 Minutos",
+        "description": "Sigue esta rutina guiada por tiempo para aliviar la tensión muscular y recargar tu energía durante largas sesiones de estudio.",
+        "category": "herramienta",
+        "content": "...",
+        "imageId": "resource-5",
+        "url": "#"
+    },
+    {
+        "id": "herr-3",
+        "title": "Botiquín de Frases de Aliento",
+        "description": "Un conjunto de frases de ánimo y recordatorios positivos para esos momentos en que más lo necesitas.",
+        "category": "herramienta",
+        "content": "Un paso a la vez. No tienes que resolverlo todo ahora.\nHas superado el 100% de tus días malos.\nDescansar no es rendirse, es prepararse.\nEstá bien no estar bien.\nTu progreso no tiene que ser lineal para ser válido.\nEres más fuerte de lo que crees.\nPermítete ser un principiante. Nadie empieza siendo excelente.\nHecho es mejor que perfecto.",
+        "imageId": "resource-6",
+        "url": "#"
+    }
+];
+
+export const workshopCategories: WorkshopCategory[] = [
+    {
+        id: 'cat-1',
+        title: 'Reuniones Virtuales',
+        activities: [
+            { id: 'act-1-1', title: 'Charla por Zoom sobre manejo de la ansiedad social.', votes: 2, date: "Viernes, 25 de Oct", time: "18:00" },
+            { id: 'act-1-2', title: 'Grupo de conversación en Discord para compartir experiencias de la semana.', votes: 4 },
+            { id: 'act-1-3', title: 'Taller de meditación guiada en vivo.', votes: 1, date: "Lunes, 28 de Oct", time: "20:00" },
+        ]
+    },
+    {
+        id: 'cat-2',
+        title: 'Encuentros Presenciales',
+        activities: [
+            { id: 'act-2-1', title: 'Caminata grupal anti-estrés por el campus.', votes: 5, date: "Sábado, 26 de Oct", time: "10:00" },
+            { id: 'act-2-2', title: 'Paseo al parque más cercano para una sesión de yoga al aire libre.', votes: 0 },
+            { id: 'act-2-3', title: 'Organizar un picnic de bienestar en las áreas verdes de la universidad.', votes: 2 },
+        ]
+    },
+    {
+        id: 'cat-3',
+        title: 'Club de Lectura',
+        activities: [
+            { id: 'act-3-1', title: 'Reunión en la biblioteca para discutir "El poder del ahora".', votes: 1 },
+            { id: 'act-3-2', title: 'Carrera de lectura: leer un libro de autoayuda en un mes y compartir aprendizajes.', votes: 4, date: "Todo Noviembre", time: "N/A" },
+        ]
+    },
+    {
+        id: 'cat-4',
+        title: 'Noches de Juegos',
+        activities: [
+            { id: 'act-4-1', title: 'Noche de juegos de mesa relajantes en el centro de estudiantes.', votes: 2 },
+            { id: 'act-4-2', title: 'Torneo amistoso de juegos online (Among Us, Gartic Phone) en Discord.', votes: 3, date: "Jueves, 31 de Oct", time: "21:00" },
+        ]
     }
 ];

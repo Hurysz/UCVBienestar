@@ -9,11 +9,53 @@ import { Bot, ChevronDown, SendHorizonal, User, X } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc } from "firebase/firestore";
+import { Skeleton } from "./ui/skeleton";
+import { useRouter } from "next/navigation";
 
 type Message = {
   role: "user" | "bot";
   text: string;
 };
+
+type UserProfile = {
+    name: string;
+}
+
+const ChatMessage = ({ text }: { text: string }) => {
+  const router = useRouter();
+
+  const handleNavigation = (path: string) => {
+    router.push(path);
+  };
+  
+  const parts = text.split(/(\[button:.+?\]\(.+?\))/g);
+
+  return (
+    <p className="text-sm whitespace-pre-wrap">
+      {parts.map((part, index) => {
+        const match = part.match(/\[button:(.+)\]\((.+)\)/);
+        if (match) {
+          const buttonText = match[1];
+          const path = match[2];
+          return (
+            <Button
+              key={index}
+              onClick={() => handleNavigation(path)}
+              className="mt-2"
+              size="sm"
+            >
+              {buttonText}
+            </Button>
+          );
+        }
+        return part;
+      })}
+    </p>
+  );
+};
+
 
 export function AiChatbot() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -21,6 +63,16 @@ export function AiChatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  const { user, isUserLoading } = useUser();
+  const firestore = useFirestore();
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, "users", user.uid);
+  }, [firestore, user]);
+
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +89,12 @@ export function AiChatbot() {
     setIsLoading(true);
 
     try {
-      const response = await aiChatbotTriage({ query: input, history: newMessages.slice(-5) });
+      const response = await aiChatbotTriage({ 
+          query: input, 
+          history: newMessages.slice(-5),
+          userName: userProfile?.name,
+          userId: user?.uid,
+      });
       const botMessage: Message = {
         role: "bot",
         text: response.answer,
@@ -54,6 +111,21 @@ export function AiChatbot() {
       setIsLoading(false);
     }
   };
+  
+  useEffect(() => {
+    if (isOpen && messages.length === 0 && !isProfileLoading && !isLoading) {
+        setIsLoading(true);
+        const initialBotMessage: Message = {
+            role: "bot",
+            text: `¡Hola, ${userProfile?.name || 'estudiante'}! Soy tu asistente de bienestar. ¿Cómo te sientes hoy? Puedes preguntarme sobre tus citas o buscar recursos de ayuda.`,
+        };
+        setTimeout(() => {
+            setMessages([initialBotMessage]);
+            setIsLoading(false);
+        }, 500);
+    }
+  }, [isOpen, messages.length, isProfileLoading, userProfile, isLoading]);
+
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -62,7 +134,7 @@ export function AiChatbot() {
         viewport.scrollTop = viewport.scrollHeight;
       }
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
   return (
     <div className="fixed bottom-4 left-4 z-50">
@@ -76,14 +148,19 @@ export function AiChatbot() {
                 <ChevronDown className="h-5 w-5" />
             </button>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col p-0">
-            <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+          <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+            <ScrollArea className="flex-1 p-4 h-full" ref={scrollAreaRef}>
               <div className="space-y-6">
-                {messages.length === 0 && (
-                    <div className="text-center text-muted-foreground p-8">
-                        <Bot className="mx-auto h-10 w-10 mb-4"/>
-                        <p className="text-sm">Soy tu asistente de bienestar. <br/>¿Cómo te sientes hoy?</p>
+                {messages.length > 0 && (
+                    <div className="text-center text-xs text-muted-foreground py-2">
+                        Los mensajes son temporales y se borrarán al cerrar la ventana.
                     </div>
+                )}
+                {(isUserLoading || isProfileLoading) && messages.length === 0 && (
+                   <div className="text-center text-muted-foreground p-8">
+                       <Skeleton className="h-10 w-10 rounded-full mx-auto mb-4" />
+                       <Skeleton className="h-4 w-48 mx-auto" />
+                   </div>
                 )}
                 {messages.map((message, index) => (
                   <div
@@ -98,7 +175,7 @@ export function AiChatbot() {
                         </Avatar>
                      )}
                     <div className={`rounded-lg p-3 max-w-[80%] ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-accent"}`}>
-                        <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                       <ChatMessage text={message.text} />
                     </div>
                      {message.role === "user" && (
                         <Avatar className="h-8 w-8">
@@ -130,7 +207,7 @@ export function AiChatbot() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Escribe un mensaje..."
                   autoComplete="off"
-                  disabled={isLoading}
+                  disabled={isLoading || isUserLoading || isProfileLoading}
                   className="text-sm"
                 />
                 <Button type="submit" size="icon" disabled={!input.trim() || isLoading}>

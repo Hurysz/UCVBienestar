@@ -23,13 +23,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Upload } from "lucide-react";
-import { useDoc, useFirestore, useUser, useMemoFirebase, useFirebaseApp, useAuth } from "@/firebase";
+import { useDoc, useFirestore, useUser, useMemoFirebase, useAuth, useFirebaseApp } from "@/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { updateProfile, sendPasswordResetEmail } from "firebase/auth";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL, UploadTask } from "firebase/storage";
 import { Progress } from "@/components/ui/progress";
-
+import type { FirebaseApp } from "firebase/app";
 
 const profileSchema = z.object({
   name: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres." }),
@@ -50,14 +50,14 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
-  const firebaseApp = useFirebaseApp();
   const auth = useAuth();
+  const app = useFirebaseApp(); 
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
-  const [displayPhoto, setDisplayPhoto] = useState<string | undefined>(undefined);
-
+  const uploadTaskRef = useRef<UploadTask | null>(null);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -77,29 +77,34 @@ export default function ProfilePage() {
   useEffect(() => {
     if (userProfile) {
       form.reset({
-        name: userProfile.name,
+        name: userProfile.name || '',
         description: userProfile.description || "",
       });
-      setDisplayPhoto(userProfile.profilePicture);
-    } else if(user) {
+    } else if (user) {
         form.reset({
             name: user.displayName || "",
             description: "",
         })
-        setDisplayPhoto(user.photoURL || undefined);
     }
   }, [userProfile, user, form]);
 
   const handlePictureUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !user || !userDocRef || !firebaseApp) return;
+    if (!file || !user || !userDocRef || !app) return;
 
     setIsUploading(true);
     setUploadProgress(0);
 
-    const storage = getStorage(firebaseApp);
+    const storage = getStorage(app);
     const storageRef = ref(storage, `profilePictures/${user.uid}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
+    uploadTaskRef.current = uploadTask;
+
+    const timeoutId = setTimeout(() => {
+        if (uploadTaskRef.current) {
+            uploadTaskRef.current.cancel();
+        }
+    }, 120000); // 2 minutos de tiempo de espera
 
     uploadTask.on(
       'state_changed',
@@ -108,11 +113,47 @@ export default function ProfilePage() {
         setUploadProgress(progress);
       },
       (error) => {
+        clearTimeout(timeoutId);
+        uploadTaskRef.current = null;
         setIsUploading(false);
         setUploadProgress(0);
-        console.error("Upload error:", error);
+        console.error("Error en la subida:", error);
 
-        let description = `Ocurrió un error inesperado. Código: ${error.code}`;
+        let description = "Ocurrió un error inesperado al subir la imagen.";
+
+        // No mostrar toast para 'storage/canceled' si el progreso es menor a 100,
+        // ya que el timeout lo habrá disparado.
+        if (error.code === 'storage/canceled' && uploadTask.snapshot.bytesTransferred < uploadTask.snapshot.totalBytes) {
+             toast({
+              variant: "destructive",
+              title: "Error al subir la imagen",
+              description: "La subida de la imagen ha tardado demasiado y ha sido cancelada. Por favor, inténtalo de nuevo.",
+            });
+            return;
+        }
+
+        switch (error.code) {
+          case 'storage/unauthorized':
+            description = "No tienes permiso para subir archivos. Por favor, revisa las reglas de seguridad de Firebase Storage.";
+            break;
+          case 'storage/canceled':
+             // Este caso solo debería ocurrir si se cancela manualmente, no por el timeout.
+            description = "La subida fue cancelada.";
+            break;
+          case 'storage/quota-exceeded':
+            description = "Se ha excedido la cuota de almacenamiento. No se pueden subir más archivos.";
+            break;
+          case 'storage/invalid-argument':
+              description = "El archivo proporcionado no es válido. Asegúrate de que sea una imagen.";
+              break;
+          case 'storage/retry-limit-exceeded':
+              description = "Se ha superado el límite de intentos. Por favor, revisa tu conexión a internet.";
+              break;
+          default:
+            description = `Ocurrió un error inesperado. Código: ${error.code}`;
+            break;
+        }
+
         toast({
           variant: "destructive",
           title: "Error al subir la imagen",
@@ -120,6 +161,8 @@ export default function ProfilePage() {
         });
       },
       async () => {
+        clearTimeout(timeoutId);
+        uploadTaskRef.current = null;
         try {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
           
@@ -128,14 +171,12 @@ export default function ProfilePage() {
           }
           await setDoc(userDocRef, { profilePicture: downloadURL }, { merge: true });
           
-          setDisplayPhoto(downloadURL);
-          
           toast({
             title: "Foto de perfil actualizada",
             description: "Tu nueva foto de perfil se ha guardado.",
           });
         } catch (error) {
-            console.error("Error updating profile:", error);
+            console.error("Error guardando el perfil:", error);
             const err = error as FirebaseError;
             toast({
                 variant: "destructive",
@@ -150,9 +191,8 @@ export default function ProfilePage() {
     );
   };
 
-
   async function onSubmit(values: z.infer<typeof profileSchema>) {
-    if (!user || !userDocRef || !firestore) return;
+    if (!user || !userDocRef || !firestore || !auth) return;
     
     try {
         const updatedProfile = {
@@ -171,7 +211,7 @@ export default function ProfilePage() {
           description: "Tu información ha sido guardada con éxito.",
         });
     } catch (error) {
-        console.error("Profile update error: ", error);
+        console.error("Error al actualizar el perfil: ", error);
         toast({
             variant: "destructive",
             title: "Error al actualizar",
@@ -191,11 +231,13 @@ export default function ProfilePage() {
       }
       setIsSendingPasswordReset(true);
       try {
-        await sendPasswordResetEmail(auth, user.email);
-        toast({
-            title: "Correo de recuperación enviado",
-            description: "Revisa tu bandeja de entrada para cambiar tu contraseña.",
-        });
+        if (auth && user.email) {
+          await sendPasswordResetEmail(auth, user.email);
+          toast({
+              title: "Correo de recuperación enviado",
+              description: "Revisa tu bandeja de entrada para cambiar tu contraseña.",
+          });
+        }
       } catch (error) {
            toast({
             variant: "destructive",
@@ -208,13 +250,15 @@ export default function ProfilePage() {
   }
   
   const isLoading = isUserLoading || isProfileLoading;
+  const displayPhoto = userProfile?.profilePicture || user?.photoURL;
   
   if (isLoading) {
     return (
         <div className="space-y-6">
             <Card className="overflow-hidden">
                  <Skeleton className="h-32 md:h-48 w-full" />
-                 <div className="pt-16 px-6 pb-6 md:pt-20">
+                 <div className="relative pt-16 px-6 pb-6 md:pt-20">
+                     <Skeleton className="absolute bottom-0 left-6 translate-y-1/2 h-24 w-24 rounded-full border-4 border-background md:h-32 md:w-32" />
                      <Skeleton className="h-8 w-48 mb-2" />
                      <Skeleton className="h-4 w-64" />
                 </div>
@@ -247,7 +291,7 @@ export default function ProfilePage() {
       <input 
         type="file" 
         ref={fileInputRef} 
-        onChange={handlePictureUpload} 
+        onChange={handlePictureUpload}
         className="hidden" 
         accept="image/png, image/jpeg"
       />
@@ -257,8 +301,8 @@ export default function ProfilePage() {
           <div className="absolute bottom-0 left-6 translate-y-1/2">
             <div className="relative h-24 w-24 rounded-full border-4 border-background md:h-32 md:w-32 group">
                 <Avatar className="h-full w-full">
-                  <AvatarImage src={displayPhoto || undefined} alt={userProfile?.name || "User"} />
-                  <AvatarFallback className="text-4xl">{user?.displayName?.charAt(0) || userProfile?.name?.charAt(0) || user?.email?.charAt(0) ||'U'}</AvatarFallback>
+                  <AvatarImage src={displayPhoto || ''} alt={userProfile?.name || "User"} />
+                  <AvatarFallback className="text-4xl">{userProfile?.name?.charAt(0) || user?.email?.charAt(0) ||'U'}</AvatarFallback>
                 </Avatar>
                 <div 
                   className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
@@ -274,7 +318,7 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-        <div className="pt-20 px-6 pb-6 md:pt-24">
+        <div className="pt-16 px-6 pb-6 md:pt-20">
             <h1 className="text-2xl font-bold font-headline">{form.getValues("name")}</h1>
             <p className="text-muted-foreground">{user?.email}</p>
         </div>

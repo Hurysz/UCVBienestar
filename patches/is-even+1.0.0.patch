@@ -1,0 +1,10 @@
+diff --git a/node_modules/is-even/index.js b/node_modules/is-even/index.js
+index 3b3e3953495d430485a0454316de52f458e07831..3b3e3953495d430485a0454316de52f458e07831
+--- a/node_modules/is-even/index.js
++++ b/node_modules/is-even/index.js
+@@ -0,0 +1,5 @@
++'use strict';
++
++const isOdd = require('is-odd');
++
++module.exports = num => !isOdd(num);

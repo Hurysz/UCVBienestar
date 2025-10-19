@@ -82,3 +82,70 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .animated-rgb-text {
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500;
+    animation: animate-rgb 5s linear infinite;
+    background-size: 400% 400%;
+  }
+
+  .animated-rgb-button {
+    position: relative;
+    overflow: hidden;
+    color: white;
+    background: #1a1a1a;
+  }
+
+  .animated-rgb-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 200%;
+    height: 100%;
+    background: linear-gradient(115deg, #4fcf70, #fad648, #a767e5, #12bcfe, #44ce7b);
+    background-size: 50% 100%;
+    animation: animate-rgb-border 4s linear infinite;
+  }
+
+  .animated-rgb-button span {
+    position: relative;
+    z-index: 1;
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    background: hsl(var(--card));
+    border-radius: 0.375rem; /* 6px */
+    width: calc(100% - 4px);
+    height: calc(100% - 4px);
+    margin: 2px;
+    color: hsl(var(--card-foreground));
+    transition: color 0.2s ease-in-out;
+  }
+  
+   .animated-rgb-button:hover span {
+      color: white;
+      background: transparent;
+   }
+}
+
+@keyframes animate-rgb {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes animate-rgb-border {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}

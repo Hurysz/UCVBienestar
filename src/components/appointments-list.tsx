@@ -2,31 +2,49 @@
 
 import { useState, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, query, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "./ui/card";
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Skeleton } from './ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Alert, AlertDescription } from './ui/alert';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { notifyFeedback } from '@/ai/flows/notify-feedback';
 import { differenceInHours, differenceInDays, format, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Calendar, Clock, Loader2, MessageSquare, RotateCcw, XCircle } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
+
+
+// This type represents the serialized timestamp object we create in useCollection
+type SerializedTimestamp = {
+  _seconds: number;
+  _nanoseconds: number;
+  _isFirebaseTimestamp: true;
+};
+
+// Helper to check if a value is our serialized timestamp
+function isSerializedTimestamp(value: any): value is SerializedTimestamp {
+  return value && value._isFirebaseTimestamp === true;
+}
+
+// Helper to deserialize our custom object back to a Date
+function deserializeTimestamp(ts: SerializedTimestamp): Date {
+  return new Timestamp(ts._seconds, ts._nanoseconds).toDate();
+}
+
 
 type Appointment = {
     id: string;
     userId: string;
-    startTime: Timestamp;
-    endTime: Timestamp;
+    startTime: SerializedTimestamp;
+    endTime: SerializedTimestamp;
     location: string;
     description: string;
     isVirtual: boolean;
     status: 'scheduled' | 'cancelled' | 'completed';
-    createdAt: Timestamp;
-    cancelledAt?: Timestamp | null;
+    createdAt: SerializedTimestamp;
+    cancelledAt?: SerializedTimestamp | null;
     feedback?: string;
 }
 
@@ -42,7 +60,7 @@ export function AppointmentsList() {
 
     const appointmentsQuery = useMemoFirebase(() => {
         if (!appointmentsCollectionRef) return null;
-        return query(appointmentsCollectionRef, orderBy('startTime', 'desc'));
+        return query(appointmentsCollectionRef, orderBy('createdAt', 'desc'));
     }, [appointmentsCollectionRef]);
 
     const { data: appointments, isLoading } = useCollection<Appointment>(appointmentsQuery);
@@ -126,21 +144,34 @@ function AppointmentItem({ appointment, onCancel, onResume }: { appointment: App
     const firestore = useFirestore();
     const { toast } = useToast();
     
-    // Robust check for timestamps before converting
-    if (!appointment.startTime || typeof appointment.startTime.toDate !== 'function' || !appointment.endTime || typeof appointment.endTime.toDate !== 'function') {
-      return null; // Don't render if dates are invalid to prevent crash
+    // Safely deserialize timestamps
+    const startTime = useMemo(() => isSerializedTimestamp(appointment.startTime) ? deserializeTimestamp(appointment.startTime) : null, [appointment.startTime]);
+    const endTime = useMemo(() => isSerializedTimestamp(appointment.endTime) ? deserializeTimestamp(appointment.endTime) : null, [appointment.endTime]);
+    const cancelledAtDate = useMemo(() => isSerializedTimestamp(appointment.cancelledAt) ? deserializeTimestamp(appointment.cancelledAt) : null, [appointment.cancelledAt]);
+
+    // If dates are not valid yet, don't render the item to prevent errors
+    if (!startTime || !endTime) {
+      return null;
     }
 
     const now = new Date();
-    const startTime = appointment.startTime.toDate();
-    const endTime = appointment.endTime.toDate();
-
     const isCompleted = appointment.status !== 'cancelled' && isAfter(now, endTime);
     const effectiveStatus = isCompleted ? 'completed' : appointment.status;
+    
+    const statusConfig = {
+        scheduled: { label: 'Agendada', color: 'bg-blue-500', text: 'text-blue-500', border: 'border-blue-500/20' },
+        cancelled: { label: 'Cancelada', color: 'bg-red-500', text: 'text-red-500', border: 'border-red-500/20' },
+        completed: { label: 'Completada', color: 'bg-green-500', text: 'text-green-500', border: 'border-green-500/20' },
+    };
+
+    const currentStatus = statusConfig[effectiveStatus as keyof typeof statusConfig];
+    
+    // If status is somehow invalid, don't render
+    if (!currentStatus) {
+        return null;
+    }
 
     const canCancel = effectiveStatus === 'scheduled' && differenceInDays(startTime, now) >= 2;
-    
-    const cancelledAtDate = appointment.cancelledAt && typeof appointment.cancelledAt.toDate === 'function' ? appointment.cancelledAt.toDate() : null;
     const canResume = effectiveStatus === 'cancelled' && cancelledAtDate && differenceInHours(now, cancelledAtDate) < 3;
     
     const handleSubmitFeedback = async () => {
@@ -170,19 +201,6 @@ function AppointmentItem({ appointment, onCancel, onResume }: { appointment: App
             setIsSubmittingFeedback(false);
         }
     };
-
-
-    const statusConfig = {
-        scheduled: { label: 'Agendada', color: 'bg-blue-500', text: 'text-blue-500', border: 'border-blue-500/20' },
-        cancelled: { label: 'Cancelada', color: 'bg-red-500', text: 'text-red-500', border: 'border-red-500/20' },
-        completed: { label: 'Completada', color: 'bg-green-500', text: 'text-green-500', border: 'border-green-500/20' },
-    };
-
-    const currentStatus = statusConfig[effectiveStatus as keyof typeof statusConfig];
-    
-    if (!currentStatus) {
-        return null;
-    }
 
     return (
         <div className={`p-4 rounded-lg border bg-card-foreground/5 ${currentStatus.border}`}>
@@ -271,3 +289,5 @@ function AppointmentsSkeleton() {
         </Card>
     )
 }
+
+    

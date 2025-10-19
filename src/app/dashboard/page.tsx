@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { HeartHandshake, Calendar, Library, ArrowRight } from "lucide-react";
+import { HeartHandshake, Calendar, Library, ArrowRight, Award, Newspaper, Star } from "lucide-react";
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { AppointmentsList } from "@/components/appointments-list";
+import { resources, workshopCategories } from "@/lib/resources";
 
 const quickLinks = [
   {
@@ -26,10 +27,20 @@ const quickLinks = [
 ];
 
 export default function DashboardPage() {
+  
+  const winningActivity = workshopCategories
+    .flatMap(category => category.activities.map(activity => ({ ...activity, categoryTitle: category.title })))
+    .filter(activity => activity.votes >= 5)
+    .sort((a, b) => b.votes - a.votes)[0];
+
+  const newestArticle = resources.find(r => r.category === 'articulo');
+
+  const suggestedWorkshop = workshopCategories[0];
+
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-3xl font-bold font-headline">Bienvenido a UCV Bienestar</h1>
+        <h1 className="text-3xl font-bold font-headline animated-rgb-text">Bienvenido a UCV Bienestar</h1>
         <p className="text-muted-foreground">Tu espacio seguro para el cuidado de la salud mental.</p>
       </div>
       
@@ -64,14 +75,58 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="p-4 rounded-lg border bg-card-foreground/5">
-              <h3 className="font-semibold">Taller de Mindfulness y Reducción de Estrés</h3>
-              <p className="text-sm text-muted-foreground">Inscríbete en nuestro próximo taller gratuito para aprender técnicas de relajación. Próximo Lunes, 4 PM.</p>
-            </div>
-             <div className="p-4 rounded-lg border bg-card-foreground/5">
-              <h3 className="font-semibold">Nuevos Artículos en la Biblioteca</h3>
-              <p className="text-sm text-muted-foreground">Hemos añadido guías sobre manejo de la ansiedad y hábitos de sueño saludables. ¡Revísalos en la sección de Recursos!</p>
-            </div>
+            
+            {winningActivity && (
+              <div className="p-4 rounded-lg border bg-primary/10 border-primary/20">
+                <div className="flex items-center gap-3 mb-1">
+                  <Award className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-primary">¡Actividad Ganadora de la Semana!</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Gracias a sus votos, la próxima actividad será: <span className="font-bold text-foreground">"{winningActivity.title}"</span> de la categoría "{winningActivity.categoryTitle}". 
+                  {winningActivity.date && winningActivity.time && (
+                    <>
+                      {' '}¡Te esperamos el <span className="font-bold text-foreground">{winningActivity.date} a las {winningActivity.time}</span>!
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {newestArticle && (
+              <div className="p-4 rounded-lg border bg-card-foreground/5">
+                 <div className="flex items-center gap-3 mb-1">
+                  <Newspaper className="h-5 w-5 text-foreground/80" />
+                  <h3 className="font-semibold">Nuevo en la Biblioteca</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Hemos añadido un nuevo artículo: <span className="font-bold text-foreground">"{newestArticle.title}"</span>. ¡Revísalo en la sección de Recursos!
+                </p>
+                 <Link href="/dashboard/resources" passHref>
+                  <Button variant="link" className="p-0 h-auto text-primary text-sm mt-2">
+                    Leer artículos <ArrowRight className="ml-1 h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            )}
+
+            {suggestedWorkshop && !winningActivity && (
+               <div className="p-4 rounded-lg border bg-card-foreground/5">
+                 <div className="flex items-center gap-3 mb-1">
+                  <Star className="h-5 w-5 text-foreground/80" />
+                  <h3 className="font-semibold">¡Tú Decides!</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  ¿Te interesa un taller sobre "{suggestedWorkshop.title}"? ¡Ve a la sección de Recursos y vota por tus actividades favoritas!
+                </p>
+                 <Link href="/dashboard/resources" passHref>
+                  <Button variant="link" className="p-0 h-auto text-primary text-sm mt-2">
+                    Votar ahora <ArrowRight className="ml-1 h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            )}
+
           </div>
         </CardContent>
       </Card>

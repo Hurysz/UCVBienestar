@@ -11,6 +11,7 @@ import { collection, query, orderBy, serverTimestamp, Timestamp, doc, addDoc } f
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { Card } from "@/components/ui/card";
 
 type ChatMessage = {
   id: string;
@@ -101,12 +102,12 @@ export default function ChatPage() {
   const isSendDisabled = !newMessage.trim() || !user || isProfileLoading;
 
   return (
-    <div className="flex h-[calc(100vh-theme(spacing.28))] flex-col">
+    <div className="flex flex-col h-full">
        <div>
         <h1 className="text-3xl font-bold font-headline">Grupos de Apoyo</h1>
         <p className="text-muted-foreground">Conéctate e interactúa con otros estudiantes en un espacio seguro.</p>
       </div>
-      <div className="flex-1 mt-6 flex flex-col rounded-lg border">
+      <Card className="flex-1 mt-6 flex flex-col rounded-lg border">
         <div className="border-b p-4">
           <h2 className="font-semibold">#General-Ansiedad-Estudios</h2>
         </div>
@@ -157,7 +158,7 @@ export default function ChatPage() {
             </Button>
           </form>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
